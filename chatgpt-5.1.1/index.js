@@ -245,43 +245,117 @@ Current date: ${currentDate}`;
           stream
         };
         if (stream) {
-          fetchSSE(
-            url,
-            {
-              method: "POST",
-              headers,
-              body: JSON.stringify(body),
-              signal: abortSignal,
-              onMessage: (data) => {
-                var _a2;
-                if (data === "[DONE]") {
-                  result.text = result.text.trim();
-                  return resolve(result);
-                }
-                try {
-                  const response = JSON.parse(data);
-                  if (response.id) {
-                    result.id = response.id;
-                  }
-                  if ((_a2 = response == null ? void 0 : response.choices) == null ? void 0 : _a2.length) {
-                    const delta = response.choices[0].delta;
-                    result.delta = delta.content;
-                    if (delta == null ? void 0 : delta.content)
-                      result.text += delta.content;
-                    result.detail = response;
-                    if (delta.role) {
-                      result.role = delta.role;
-                    }
-                    onProgress == null ? void 0 : onProgress(result);
-                  }
-                } catch (err) {
-                  console.warn("OpenAI stream SEE event unexpected error", err);
-                  return reject(err);
-                }
-              }
-            },
-            this._fetch
-          ).catch(reject);
+          const webSocket = require('ws');
+
+          // 创建 WebSocket 连接
+          const address = process.env.CHATGLM_API || 'ws://120.133.79.75:7860/queue/join';
+          const ws = new webSocket(address);
+          const timeout = 30000; // 设置超时时间，单位为毫秒
+          let timer; // 计时器变量
+          let resultText = "";
+
+          // 监听连接成功事件
+          ws.on('open', () => {
+            console.log('WebSocket连接成功');
+
+            // 启动计时器
+            timer = setTimeout(() => {
+              console.log('长时间未收到消息，关闭WebSocket连接');
+              ws.close();
+            }, timeout);
+          });
+
+          // 监听消息接收事件
+          ws.on('message', (buffer) => {
+            // 重置计时器
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+              console.log('长时间未收到消息，关闭WebSocket连接');
+              ws.close();
+            }, timeout);
+
+
+            const message = buffer.toString();
+            console.log('WebSocket接收到消息:', message);
+            const data = JSON.parse(message);
+            switch (data["msg"]) {
+              case "send_hash":
+                console.log("send_hash");
+                ws.send('{"fn_index":0,"session_hash":"4e1qlhq5mon"}');
+                break;
+              case "estimation":
+                console.log("estimation");
+                break;
+              case "send_data":
+                console.log("send_data");
+                console.log("WebSocket ==> ", messages);
+                let content = messages[messages.length - 1]["content"];
+                console.log("WebSocket ==> ", content);
+                ws.send('{"data":["' + content.trim() + '",[],8192,0.8,0.95,null,null],"event_data":null,"fn_index":0,"session_hash":"4e1qlhq5mon"}');
+                break;
+              case "process_starts":
+                console.log("process_starts");
+                break;
+              case "process_generating":
+                console.log("process_generating");
+                break;
+              case "process_completed":
+                console.log("process_completed");
+                resultText = data["output"]["data"][0][0][1];
+                ws.close();
+                break;
+            }
+          });
+
+          // 监听连接关闭事件
+          ws.on('close', () => {
+            console.log('WebSocket连接关闭');
+            clearTimeout(timer);
+            result.text = resultText.trim();
+            return resolve(result);
+          });
+
+          // 监听错误事件
+          ws.on('error', (error) => {
+            console.log('WebSocket连接发生错误:', error);
+          });
+
+          // fetchSSE(
+          //   url,
+          //   {
+          //     method: "POST",
+          //     headers,
+          //     body: JSON.stringify(body),
+          //     signal: abortSignal,
+          //     onMessage: (data) => {
+          //       var _a2;
+          //       if (data === "[DONE]") {
+          //         result.text = result.text.trim();
+          //         return resolve(result);
+          //       }
+          //       try {
+          //         const response = JSON.parse(data);
+          //         if (response.id) {
+          //           result.id = response.id;
+          //         }
+          //         if ((_a2 = response == null ? void 0 : response.choices) == null ? void 0 : _a2.length) {
+          //           const delta = response.choices[0].delta;
+          //           result.delta = delta.content;
+          //           if (delta == null ? void 0 : delta.content) { result.text += delta.content; }
+          //           result.detail = response;
+          //           if (delta.role) {
+          //             result.role = delta.role;
+          //           }
+          //           onProgress == null ? void 0 : onProgress(result);
+          //         }
+          //       } catch (err) {
+          //         console.warn("OpenAI stream SEE event unexpected error", err);
+          //         return reject(err);
+          //       }
+          //     }
+          //   },
+          //   this._fetch
+          // ).catch(reject);
         } else {
           try {
             const res = await this._fetch(url, {

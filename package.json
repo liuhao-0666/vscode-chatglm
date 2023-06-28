@@ -227,7 +227,7 @@
       "activitybar": [
         {
           "id": "vscode-chatgpt-view-container",
-          "title": "ChatGPT",
+          "title": "ChatGLM",
           "icon": "images/ai-logo-in.png"
         }
       ]
